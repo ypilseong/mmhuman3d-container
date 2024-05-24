@@ -73,7 +73,10 @@ services:
             # Reserves the specified GPU for the container
             - driver: nvidia
               device_ids: ["${CONTAINER_CUDA_DEVICE_ID}"]
-              capabilities: [gpu]
+              capabilities: [gpu- gpu,
+                utility, # nvidia-smi
+                compute, # CUDA
+                video]
 networks:
   default:
     # Sets the name of the default network and makes it external
