@@ -1,5 +1,5 @@
 # Sets the base image for subsequent instructions
-ARG ARG_BUILD_FROM="nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04"
+ARG ARG_BUILD_FROM="nvidia/cuda:12.1.0-devel-ubuntu22.04"
 FROM $ARG_BUILD_FROM AS builder
 
 # Sets labels for the image
@@ -41,7 +41,7 @@ RUN mkdir -p $WORKSPACE_ROOT/projects
 WORKDIR $WORKSPACE_ROOT
 # Copies scripts from host into the image
 COPY ./.docker/scripts/ ./scripts/
-# RUN pip install -r ./scripts/requirements-cuda-113.txt
+
 
 # Sets the time zone within the container
 ENV TZ="Asia/Seoul"
@@ -101,14 +101,14 @@ RUN apt-get install -y libreadline-gplv2-dev libncursesw5-dev libssl-dev \
 RUN apt-get install checkinstall 
 RUN apt install -y software-properties-common
 RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt install -y python3.7
+RUN apt install -y python3.10
 RUN apt install -y python3-pip
-RUN apt-get install -y python3.7-distutils
+RUN apt-get install -y python3.10-distutils
 RUN wget https://bootstrap.pypa.io/get-pip.py \
-    && python3.7 get-pip.py \
-    && python3.7 -m pip install --upgrade pip
-RUN apt-get install -y python3.7-dev python3.7-venv
-
+    && python3.10 get-pip.py \
+    && python3.10 -m pip install --upgrade pip
+RUN apt-get install -y python3.10-dev python3.10-venv
+RUN apt-get install -y ninja-build cmake gfortran
 
 USER $USERNAME
 # Create and activate virtual environment
@@ -121,10 +121,10 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 ENV PATH /opt/conda/bin:$PATH
 
 # Create and activate conda environment
-RUN conda create -n OpenMMlab python=3.7 -y \
+RUN conda create -n OpenMMlab python=3.10 -y \
     && echo "source activate OpenMMlab" > ~/.bashrc \
     && conda install -n OpenMMlab ffmpeg -y \
-    && conda install -n OpenMMlab pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch -y \
+    && conda install -n OpenMMlab pytorch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 -c pytorch -y \
     && conda install -n OpenMMlab -c fvcore -c iopath -c conda-forge fvcore iopath -y \
     && conda install -n OpenMMlab -c bottler nvidiacub -y \
     && conda install -n OpenMMlab -c pytorch3d pytorch3d -y
@@ -146,34 +146,37 @@ RUN echo 'export PATH=~/home/${USERNAME}/anaconda3/bin:$PATH' >> ~/.bashrc \
     && echo 'fi' >> ~/.bashrc \
     && echo 'unset __conda_setup' >> ~/.bashrc \
     && echo '# <<< conda initialize <<<' >> ~/.bashrc \
-    && echo 'export CUDA_HOME=/usr/local/cuda-11.3' >> ~/.bashrc \
-    && echo 'export PATH=/usr/local/cuda-11.3/bin${PATH:+:${PATH}}' >> ~/.bashrc \
-    && echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11.3/lib64/' >> ~/.bashrc \
+    && echo 'export CUDA_HOME=/usr/local/cuda-12.1' >> ~/.bashrc \
+    && echo 'export PATH=/usr/local/cuda-12.1/bin${PATH:+:${PATH}}' >> ~/.bashrc \
+    && echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.1/lib64/' >> ~/.bashrc \
     && echo '[ -s "/home/${USERNAME}/.oh-my-zsh/completions/_bun" ] && source "/home/${USERNAME}/.oh-my-zsh/completions/_bun"' >> ~/.bashrc \
     && echo '' >> ~/.bashrc \
     && echo '# bun' >> ~/.bashrc \
     && echo 'export BUN_INSTALL="$HOME/.bun"' >> ~/.bashrc \
     && echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> ~/.bashrc 
 
-ENV CUDA_HOME=/usr/local/cuda-11.3
-ENV PATH=/usr/local/cuda-11.3/bin${PATH:+:${PATH}}
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11.3/lib64
+ENV CUDA_HOME=/usr/local/cuda-12.1
+ENV PATH=/usr/local/cuda-12.1/bin${PATH:+:${PATH}}
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.1/lib64
+ENV CXXFLAGS="-std=c++17"
 
 # Activate conda environment for subsequent RUN commands
 SHELL ["conda", "run", "-n", "OpenMMlab", "/bin/bash", "-c"]
 
 # Clone and install mmcv within the conda environment
-RUN mkdir -p OpenMMlab/mmcv \
-    && cd OpenMMlab/mmcv \
-    && git clone https://github.com/open-mmlab/mmcv.git -b v1.5.3 \
-    && cd mmcv \
-    && pip install -r requirements.txt \
-    && MMCV_WITH_OPS=1 pip install -e .
+# RUN mkdir -p OpenMMlab/mmcv \
+#     && cd OpenMMlab/mmcv \
+#     && git clone https://github.com/open-mmlab/mmcv.git -b v2.1.0\
+#     && cd mmcv \
+#     && pip install -r requirements.txt \
+#     && pip install -e .
+RUN pip install -U openmim
+RUN mim install mmcv==2.1.0
 
 # Clone and install mmdetection within the conda environment
 RUN mkdir -p OpenMMlab/mmdetection \
     && cd OpenMMlab/mmdetection \
-    && git clone https://github.com/open-mmlab/mmdetection.git -b v2.25.1 \
+    && git clone https://github.com/open-mmlab/mmdetection.git  \
     && cd mmdetection \
     && pip install -r requirements/build.txt \
     && pip install -v -e .
@@ -181,18 +184,23 @@ RUN mkdir -p OpenMMlab/mmdetection \
 # Clone and install mmpose within the conda environment
 RUN mkdir -p OpenMMlab/mmpose \
     && cd OpenMMlab/mmpose \
-    && git clone https://github.com/open-mmlab/mmpose.git -b v1.1.0 \
+    && git clone https://github.com/open-mmlab/mmpose.git \
     && cd mmpose \
     && pip install -r requirements.txt \
     && pip install -v -e .
 
+RUN pip install cython
+RUN pip install numpy
+RUN pip install pycocotools scipy
+
+RUN pip install mmcls mmtrack
 # Clone and install mmtrack within the conda environment
-RUN mkdir -p OpenMMlab/mmtrack \
-    && cd OpenMMlab/mmtrack \
-    && git clone https://github.com/open-mmlab/mmtracking.git -b v0.14.0 \
-    && cd mmtracking \
-    && pip install -r requirements/build.txt \
-    && pip install -v -e .
+# RUN mkdir -p OpenMMlab/mmtrack \
+#     && cd OpenMMlab/mmtrack \
+#     && git clone https://github.com/open-mmlab/mmtracking.git \
+#     && cd mmtracking \
+#     && pip install -r requirements/build.txt \
+#     && pip install -v -e .
 
 # Clone and install mmhuman3D within the conda environment
 RUN mkdir -p OpenMMlab/mmhuman3D \
